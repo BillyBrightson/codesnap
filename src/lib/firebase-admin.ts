@@ -1,43 +1,55 @@
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getApps, initializeApp, cert, getApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
+import debug from 'debug';
 
-// Debug: Log environment variables availability (without exposing values)
-console.log("Firebase Admin initialization:");
-console.log("- FIREBASE_PROJECT_ID exists:", !!process.env.FIREBASE_PROJECT_ID);
-console.log("- FIREBASE_CLIENT_EMAIL exists:", !!process.env.FIREBASE_CLIENT_EMAIL);
-console.log("- FIREBASE_PRIVATE_KEY exists:", !!process.env.FIREBASE_PRIVATE_KEY);
+const log = debug('app:firebase-admin');
 
-// Check if we already have initialized apps
-console.log("- Existing Firebase Admin apps:", getApps().length);
+log('Checking environment variables...');
+log('FIREBASE_PROJECT_ID exists:', !!process.env.FIREBASE_PROJECT_ID);
+log('FIREBASE_CLIENT_EMAIL exists:', !!process.env.FIREBASE_CLIENT_EMAIL);
+log('FIREBASE_PRIVATE_KEY exists:', !!process.env.FIREBASE_PRIVATE_KEY);
 
-let adminAuth: any;
+log('Checking if any Firebase apps are initialized...');
+log('Initialized apps:', getApps().length);
+
+let adminAuth;
+let adminDb;
 
 try {
-  // Initialize Firebase Admin only if it hasn't been initialized yet
-  const firebaseAdminApp = !getApps().length
-    ? initializeApp({
-        credential: cert({
-          projectId: process.env.FIREBASE_PROJECT_ID,
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-        }),
-      })
-    : getApps()[0];
-
-  console.log("Firebase Admin initialized successfully");
-  adminAuth = getAuth(firebaseAdminApp);
-  console.log("Firebase Admin Auth service initialized");
-} catch (error) {
-  console.error("Failed to initialize Firebase Admin:", error);
+  if (!getApps().length) {
+    log('Initializing Firebase Admin...');
+    initializeApp({
+      credential: cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      }),
+    });
+    log('Firebase Admin initialized successfully');
+  }
   
-  // Provide a mock admin auth object that will prevent the app from crashing
-  // but will fail gracefully when methods are called
+  adminAuth = getAuth();
+  adminDb = getFirestore();
+  log('Firebase Admin Auth and Firestore initialized successfully');
+} catch (error) {
+  log('Error initializing Firebase Admin:', error);
+  
+  // Create a mock adminAuth object to prevent app from crashing
   adminAuth = {
-    verifyIdToken: async () => {
-      console.error("Using mock verifyIdToken because Firebase Admin failed to initialize");
-      throw new Error("Firebase Admin not properly initialized");
-    }
+    verifyIdToken: () => {
+      log('WARNING: Using mock adminAuth. Firebase Admin is not properly initialized.');
+      return Promise.reject(new Error('Firebase Admin is not properly initialized'));
+    },
+  };
+  
+  // Create a mock adminDb object
+  adminDb = {
+    collection: () => {
+      log('WARNING: Using mock adminDb. Firebase Admin is not properly initialized.');
+      return Promise.reject(new Error('Firebase Admin is not properly initialized'));
+    },
   };
 }
 
-export { adminAuth }; 
+export { adminAuth, adminDb }; 

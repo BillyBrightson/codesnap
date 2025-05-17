@@ -17,6 +17,7 @@ import {
   browserLocalPersistence
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { createWelcomeNotification } from "@/lib/firebase/notifications";
 
 interface AuthContextType {
   user: User | null;
@@ -26,6 +27,7 @@ interface AuthContextType {
   googleSignIn: () => Promise<{ success: boolean; message?: string; email?: string; isNewUser?: boolean }>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  updateUserProfile: (data: { displayName?: string; photoURL?: string }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -44,69 +46,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Set firebase persistence to local for better session handling
   useEffect(() => {
-    setPersistence(auth, browserLocalPersistence)
-      .then(() => {
-        console.log("Firebase persistence set to LOCAL");
-      })
-      .catch((error) => {
+    const setupPersistence = async () => {
+      try {
+        await setPersistence(auth, browserLocalPersistence);
+      } catch (error) {
         console.error("Error setting persistence:", error);
-      });
+      }
+    };
+    setupPersistence();
   }, []);
 
   // Handle auth state changes
   useEffect(() => {
-    console.log("Setting up auth state listener");
-    let isMounted = true;
-    
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (!isMounted) return;
-      
-      console.log("Auth state changed:", user ? `User: ${user.email}` : "No user");
-      
       if (user) {
-        // Set user in state immediately without waiting for cookie
         setUser(user);
-        
-        // Then try to set cookie as a non-blocking operation
-        try {
-          console.log("Setting auth cookie for user:", user.email);
-          const token = await getIdToken(user, true); // Force token refresh
-          
-          // Use fetch to set cookie
-          const response = await fetch("/api/auth/set-cookie", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ token }),
-          });
-          
-          if (response.ok) {
-            console.log("Auth cookie set successfully");
-          } else {
-            console.error("Failed to set auth cookie:", await response.text());
-            console.log("Continuing with authentication despite cookie failure");
-          }
-        } catch (error) {
-          console.error("Error setting auth cookie:", error);
-          console.log("Continuing with authentication despite cookie failure");
-        }
+        // Set cookie in the background without blocking the UI
+        getIdToken(user, true)
+          .then(token => 
+            fetch("/api/auth/set-cookie", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ token }),
+            })
+          )
+          .catch(error => console.error("Error setting auth cookie:", error));
       } else {
         setUser(null);
       }
-      
-      // Complete loading regardless of cookie success
-      if (isMounted) {
-        setLoading(false);
-        console.log("Auth loading completed, state:", { user: !!user, loading: false });
-      }
+      setLoading(false);
     });
 
-    return () => {
-      console.log("Cleaning up auth state listener");
-      isMounted = false;
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, []);
 
   const signUp = async (email: string, password: string, name: string) => {
@@ -124,6 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           },
           body: JSON.stringify({ token }),
         });
+        await createWelcomeNotification(userCredential.user.uid);
       }
     } catch (error) {
       console.error("Error signing up:", error);
@@ -189,55 +161,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         if (!response.ok) {
           console.error("Failed to set auth cookie:", await response.text());
+          // Continue despite cookie failure
         }
+
+        return {
+          success: true,
+          email,
+          isNewUser: result.additionalUserInfo?.isNewUser
+        };
         
-        setLoading(false);
-        return { success: true };
       } catch (error: any) {
-        setLoading(false);
-        // Handle specific error cases
-        if (error.code === "auth/account-exists-with-different-credential") {
+        if (error.code === 'auth/account-exists-with-different-credential') {
+          // Get sign-in methods for this email
           const email = error.customData?.email;
           if (email) {
+            const methods = await fetchSignInMethodsForEmail(auth, email);
             return {
               success: false,
-              message: "This email is already registered with a different method. Please sign in with that method.",
-              email,
-              isNewUser: false
+              message: `An account already exists with this email. Please sign in with ${methods[0]}.`,
+              email
             };
           }
         }
-        
-        if (error.code === "auth/user-not-found" || error.code === "auth/popup-closed-by-user") {
-          // Return info so we can redirect to registration
-          return {
-            success: false,
-            message: "No account found with this email. Please register first.",
-            email: error.customData?.email,
-            isNewUser: true
-          };
-        }
-        
         throw error;
       }
     } catch (error) {
       console.error("Error signing in with Google:", error);
+      return {
+        success: false,
+        message: "Failed to sign in with Google."
+      };
+    } finally {
       setLoading(false);
-      throw error;
     }
   };
 
   const logout = async () => {
-    setLoading(true);
     try {
       await signOut(auth);
-      // Clear the cookie by making a request to a logout endpoint
-      await fetch("/api/auth/logout", { method: "POST" });
+      // Clear auth cookie
+      await fetch("/api/auth/clear-cookie", {
+        method: "POST",
+      });
     } catch (error) {
-      console.error("Error signing out:", error);
+      console.error("Error logging out:", error);
       throw error;
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -250,6 +218,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateUserProfile = async (data: { displayName?: string; photoURL?: string }) => {
+    if (!auth.currentUser) throw new Error("No user logged in");
+    try {
+      await updateProfile(auth.currentUser, data);
+      // Force refresh the user object
+      setUser({ ...auth.currentUser });
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      throw error;
+    }
+  };
+
   const value = {
     user,
     loading,
@@ -258,6 +238,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     googleSignIn,
     logout,
     resetPassword,
+    updateUserProfile
   };
 
   return (

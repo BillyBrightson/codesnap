@@ -1,22 +1,14 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import { AuthProvider } from "@/providers/auth-provider";
-import { ToastProvider } from "@/providers/toast-provider";
+import { Toaster } from "@/components/ui/toaster";
+import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+const inter = Inter({ subsets: ["latin"] });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-export const metadata: Metadata = {
-  title: "CodeSnap QR - Generate Custom QR Codes",
-  description: "Create, customize, and track QR codes for your business or personal use.",
+export const metadata = {
+  title: "CodeSnap QR",
+  description: "Generate and manage QR codes easily",
 };
 
 export default function RootLayout({
@@ -25,13 +17,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${inter.className} antialiased`}>
         <AuthProvider>
           {children}
           <ToastProvider />
+          <Toaster />
         </AuthProvider>
       </body>
     </html>

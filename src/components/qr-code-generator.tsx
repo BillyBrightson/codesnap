@@ -15,6 +15,11 @@ import {
   Wifi,
   Lock,
 } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
+import { useAuth } from "@/providers/auth-provider";
+import { saveQRCode, saveQRCodeToFirestore } from "@/lib/firebase/qr-codes";
+import { useRouter } from "next/navigation";
+import { QRCodeType } from "@/types";
 
 type QRType = "URL" | "Text" | "Email" | "Phone" | "vCard" | "WiFi";
 
@@ -44,6 +49,9 @@ interface QRData {
 }
 
 export function QRCodeGenerator() {
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const router = useRouter();
   const [qrType, setQRType] = useState<QRType>("URL");
   const [qrName, setQrName] = useState("");
   const [qrData, setQrData] = useState<QRData>({
@@ -68,6 +76,7 @@ export function QRCodeGenerator() {
   const [fgColor, setFgColor] = useState("#000000");
   const [bgColor, setBgColor] = useState("#FFFFFF");
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
+  const [saving, setSaving] = useState(false);
 
   const generateQRCodeContent = () => {
     switch (qrType) {
@@ -102,6 +111,17 @@ END:VCARD`;
   const generateQRCode = async () => {
     try {
       const content = generateQRCodeContent();
+      
+      // Validate content before generating QR code
+      if (!content) {
+        toast({
+          title: "No input text",
+          description: "Please enter some content to generate a QR code.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
       const qrDataUrl = await QRCode.toDataURL(content, {
         width: size,
         margin: 1,
@@ -113,6 +133,94 @@ END:VCARD`;
       setQrCodeDataUrl(qrDataUrl);
     } catch (err) {
       console.error("Error generating QR code:", err);
+      toast({
+        title: "Error generating QR code",
+        description: "Please check your input and try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSave = async () => {
+    if (!user) {
+      toast({
+        title: "Please sign in",
+        description: "You need to be signed in to save QR codes.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!qrName) {
+      toast({
+        title: "Name required",
+        description: "Please provide a name for your QR code.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!qrCodeDataUrl) {
+      toast({
+        title: "Generate QR code first",
+        description: "Please generate a QR code before saving.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate content based on type
+    const content = generateQRCodeContent();
+    if (!content) {
+      toast({
+        title: "Missing information",
+        description: "Please fill in all required fields for the selected QR code type.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setSaving(true);
+      console.log('Starting QR code save...', {
+        user: user.uid,
+        qrName,
+        qrType,
+        content
+      });
+
+      const qrCodeData = {
+        name: qrName,
+        type: qrType,
+        content,
+        foregroundColor: fgColor,
+        backgroundColor: bgColor,
+        size,
+        imageData: qrCodeDataUrl,
+      };
+
+      console.log('Attempting to save QR code with data:', qrCodeData);
+      await saveQRCodeToFirestore(user.uid, qrCodeData);
+      console.log('QR code saved successfully');
+
+      toast({
+        title: "QR code saved",
+        description: "Your QR code has been saved successfully.",
+      });
+
+      // Small delay before redirect to ensure toast is visible
+      setTimeout(() => {
+        router.push("/dashboard/qrcodes");
+      }, 1000);
+    } catch (error) {
+      console.error("Error saving QR code:", error);
+      toast({
+        title: "Error saving QR code",
+        description: typeof error === 'string' ? error : "Failed to save your QR code. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -321,9 +429,9 @@ END:VCARD`;
   };
 
   return (
-    <div className="flex flex-col lg:flex-row gap-8">
-      {/* QR Code Generator Form */}
-      <div className="flex-1 bg-white rounded-xl shadow-sm border p-6">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* QR Code Generator Section - Takes up 2 columns */}
+      <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border p-6">
         <div className="space-y-6">
           <div>
             <h2 className="text-2xl font-semibold tracking-tight">QR Code Generator</h2>
@@ -332,7 +440,6 @@ END:VCARD`;
             </p>
           </div>
           
-          {/* QR Type Selection */}
           <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
             <Button
               variant={qrType === "URL" ? "default" : "outline"}
@@ -385,7 +492,6 @@ END:VCARD`;
           </div>
 
           <div className="border-t pt-6">
-            {/* QR Code Name */}
             <div className="space-y-2 mb-6">
               <Label htmlFor="qrName">QR Code Name</Label>
               <Input
@@ -396,12 +502,10 @@ END:VCARD`;
               />
             </div>
 
-            {/* Dynamic Input Fields */}
             <div className="bg-gray-50/50 rounded-lg p-6 mb-6">
               {renderInputFields()}
             </div>
 
-            {/* Color Selection */}
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div className="space-y-2">
                 <Label htmlFor="fgColor">Foreground Color</Label>
@@ -441,7 +545,6 @@ END:VCARD`;
               </div>
             </div>
 
-            {/* Size Slider */}
             <div className="space-y-4 mb-6">
               <div className="flex items-center justify-between">
                 <Label>QR Code Size</Label>
@@ -457,51 +560,66 @@ END:VCARD`;
               />
             </div>
 
-            <Button onClick={generateQRCode} className="w-full" size="lg">
-              Generate QR Code
-            </Button>
+            <div className="flex gap-4">
+              <Button 
+                onClick={generateQRCode} 
+                className="flex-1" 
+                size="lg"
+              >
+                Generate QR Code
+              </Button>
+              {qrCodeDataUrl && (
+                <Button
+                  onClick={handleSave}
+                  className="flex-1"
+                  size="lg"
+                  variant="default"
+                  disabled={saving}
+                >
+                  {saving ? "Saving..." : "Save QR Code"}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* QR Code Preview */}
-      <div className="lg:w-[400px] xl:w-[450px]">
-        <div className="bg-white rounded-xl shadow-sm border p-6 sticky top-6">
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-semibold tracking-tight">Preview</h2>
-              <p className="text-sm text-muted-foreground mt-2">
-                Preview and download your generated QR code.
-              </p>
-            </div>
-            
-            <div className="aspect-square bg-gray-50 border rounded-lg p-6 flex flex-col items-center justify-center">
-              {qrCodeDataUrl ? (
-                <img
-                  src={qrCodeDataUrl}
-                  alt="Generated QR Code"
-                  className="max-w-full h-auto rounded shadow-sm"
-                />
-              ) : (
-                <div className="text-gray-400 text-center">
-                  <QrCode className="h-20 w-20 mx-auto mb-4" />
-                  <p className="text-sm">Your QR code will appear here</p>
-                  <p className="text-xs text-muted-foreground mt-2">Click generate to create your QR code</p>
-                </div>
-              )}
-            </div>
-
-            {qrCodeDataUrl && (
-              <Button
-                onClick={handleDownload}
-                className="w-full"
-                size="lg"
-                variant="outline"
-              >
-                Download QR Code
-              </Button>
+      {/* Preview Section - Takes up 1 column */}
+      <div className="bg-white rounded-xl shadow-sm border p-6">
+        <div className="space-y-6">
+          <div>
+            <h2 className="text-2xl font-semibold tracking-tight">Preview</h2>
+            <p className="text-sm text-muted-foreground mt-2">
+              Preview and download your generated QR code.
+            </p>
+          </div>
+          
+          <div className="aspect-square bg-gray-50 border rounded-lg p-6 flex flex-col items-center justify-center">
+            {qrCodeDataUrl ? (
+              <img
+                src={qrCodeDataUrl}
+                alt="Generated QR Code"
+                className="max-w-full h-auto rounded shadow-sm"
+              />
+            ) : (
+              <div className="text-gray-400 text-center">
+                <QrCode className="h-20 w-20 mx-auto mb-4" />
+                <p className="text-sm">Your QR code will appear here</p>
+                <p className="text-xs text-muted-foreground mt-2">Click generate to create your QR code</p>
+              </div>
             )}
           </div>
+
+          {qrCodeDataUrl && (
+            <Button
+              onClick={handleDownload}
+              className="w-full"
+              size="lg"
+              variant="outline"
+            >
+              Download QR Code
+            </Button>
+          )}
         </div>
       </div>
     </div>

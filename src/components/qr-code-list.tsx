@@ -1,30 +1,37 @@
 "use client";
 
+// Completely redesigned QR code list component
+// This implementation uses a simpler approach with no hover effects
+
 import { useQRCodes } from "@/hooks/use-qr-codes";
-import { QRCode } from "@/lib/qr-service";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
-import { Button } from "./ui/button";
-import { Pencil, Trash2, Download } from "lucide-react";
+import { SavedQRCode } from "@/types";
 import { format } from "date-fns";
+import { Download, Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { Button } from "./ui/button";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "./ui/card";
 
 interface QRCodeListProps {
-  onEdit?: (qrCode: QRCode) => void;
+  onEdit?: (qrCode: SavedQRCode) => void;
+  showTrash?: boolean;
 }
 
-export function QRCodeList({ onEdit }: QRCodeListProps) {
-  const { qrCodes, loading, deleteQRCode } = useQRCodes();
+export function QRCodeList({ onEdit, showTrash = false }: QRCodeListProps) {
+  // Get QR codes and actions from the hook
+  const { qrCodes = [], loading, moveToTrash, deleteQRCode, restoreFromTrash } = useQRCodes(showTrash);
 
-  const handleDownload = (qrCode: QRCode) => {
-    if (!qrCode.data.imageData) return;
+  // Function to handle downloading a QR code
+  const handleDownload = (qrCode: SavedQRCode) => {
+    if (!qrCode.imageData) return;
 
     const link = document.createElement("a");
-    link.href = qrCode.data.imageData;
+    link.href = qrCode.imageData;
     link.download = `${qrCode.name}-qr-code.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
+  // Show loading state
   if (loading) {
     return (
       <div className="text-center py-8 text-muted-foreground">
@@ -33,63 +40,106 @@ export function QRCodeList({ onEdit }: QRCodeListProps) {
     );
   }
 
+  // Show empty state
   if (qrCodes.length === 0) {
     return (
       <div className="text-center py-8 text-muted-foreground">
-        No QR codes saved yet. Create your first one!
+        {showTrash ? "No QR codes in trash." : "No QR codes saved yet. Create your first one!"}
       </div>
     );
   }
 
+  // Render the QR code grid
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
       {qrCodes.map((qrCode) => (
-        <Card key={qrCode.id}>
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl">{qrCode.name}</CardTitle>
-            <CardDescription>
-              Created on {format(new Date(qrCode.createdAt), "PPP")}
-            </CardDescription>
+        <Card key={qrCode.id} className="flex flex-col">
+          {/* Card header with QR code name and date */}
+          <CardHeader>
+            <CardTitle className="text-xl font-bold truncate">{qrCode.name}</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {showTrash
+                ? `Deleted: ${format(new Date(qrCode.deletedAt || qrCode.updatedAt), "PPP")}` 
+                : `Created: ${format(new Date(qrCode.createdAt), "PPP")}`}
+            </p>
           </CardHeader>
-          <CardContent>
-            <div className="aspect-square relative mb-4">
-              {qrCode.data.imageData && (
+
+          {/* QR code image */}
+          <CardContent className="flex-grow flex items-center justify-center p-4">
+            {qrCode.imageData ? (
+              <div className="aspect-square w-full max-w-[200px] mx-auto">
                 <img
-                  src={qrCode.data.imageData}
+                  src={qrCode.imageData}
                   alt={`QR code for ${qrCode.name}`}
                   className="w-full h-full object-contain"
                 />
-              )}
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => handleDownload(qrCode)}
-                disabled={!qrCode.data.imageData}
-              >
-                <Download className="h-4 w-4" />
-              </Button>
-              {onEdit && (
+              </div>
+            ) : (
+              <div className="text-center text-muted-foreground">No image available</div>
+            )}
+          </CardContent>
+
+          {/* Action buttons */}
+          <CardFooter className="flex justify-end gap-2 pt-2">
+            {showTrash ? (
+              <>
+                {/* Trash mode buttons */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => restoreFromTrash(qrCode.id)}
+                  title="Restore from trash"
+                  className="flex items-center gap-1"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  <span>Restore</span>
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => deleteQRCode(qrCode.id)}
+                  title="Delete permanently"
+                  className="flex items-center gap-1"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Delete</span>
+                </Button>
+              </>
+            ) : (
+              <>
+                {/* Normal mode buttons */}
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={() => onEdit(qrCode)}
+                  onClick={() => handleDownload(qrCode)}
+                  disabled={!qrCode.imageData}
+                  title="Download QR code"
                 >
-                  <Pencil className="h-4 w-4" />
+                  <Download className="h-4 w-4" />
                 </Button>
-              )}
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => deleteQRCode(qrCode.id)}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          </CardContent>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => moveToTrash(qrCode.id)}
+                  title="Move to trash"
+                >
+                  <Trash2 className="h-4 w-4 text-red-500" />
+                </Button>
+                {onEdit && (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => onEdit(qrCode)}
+                    title="Edit QR code"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                )}
+              </>
+            )}
+          </CardFooter>
         </Card>
       ))}
     </div>
   );
-} 
+}

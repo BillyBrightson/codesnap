@@ -1,18 +1,26 @@
-export type QRCodeType = "url" | "text" | "email" | "phone" | "sms" | "wifi";
+export type QRCodeType = 'url' | 'text' | 'email' | 'phone' | 'sms' | 'wifi' | 'vcard';
 
 export interface SavedQRCode {
   id: string;
   name: string;
   type: QRCodeType;
   content: string;
+  imageData: string;
   isDynamic: boolean;
+  userId: string;
   createdAt: string;
-  imageData?: string;
+  updatedAt: string;
+  deletedAt?: string;
+  data?: {
+    [key: string]: any;
+  };
 }
 
 export interface QRCodeFormData {
   name: string;
   type: QRCodeType;
-  content: string;
   isDynamic: boolean;
+  data: {
+    [key: string]: any;
+  };
 } 

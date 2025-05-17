@@ -1,19 +1,25 @@
 // Import the functions you need from the SDKs you need
-import { initializeApp, getApp, getApps } from "firebase/app";
+import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
+import { getFirestore } from 'firebase/firestore';
 
 // Your Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyBr_l2tXPm0GGxp_kZp3u8zfz_hFHPhkCo",
-  authDomain: "codesnap-c65ef.firebaseapp.com",
-  projectId: "codesnap-c65ef",
-  storageBucket: "codesnap-c65ef.firebasestorage.app",
-  messagingSenderId: "523361568414",
-  appId: "1:523361568414:web:f2494aa14b6e3fa38e5d8f",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+// Initialize Firebase only if it hasn't been initialized yet
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
 const auth = getAuth(app);
+const db = getFirestore(app);
 
-export { app, auth }; 
+export { app, auth, db };
+
+export function isProUser(user: any) {
+  return user?.subscription && user.subscription.plan === "PRO" && user.subscription.status === "ACTIVE";
+} 

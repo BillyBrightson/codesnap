@@ -1,192 +1,204 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { QrCode, BarChart, Plus } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
+import { useToast } from "@/components/ui/use-toast";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { getDashboardMetrics } from "@/lib/firebase/dashboard";
+import { format } from "date-fns";
+import { ArrowRight, ArrowUpRight, ArrowDownRight, QrCode, Scan, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
 
-interface QRCode {
-  id: string;
-  name: string;
-  type: string;
-  scans: number;
-  createdAt: string;
+interface DashboardData {
+  totalQRCodes: number;
+  totalScans: number;
+  recentQRCodes: Array<{
+    id: string;
+    name: string;
+    type: string;
+    scanCount: number;
+    createdAt: Date;
+  }>;
+  monthlyComparison?: {
+    qrCodes: {
+      current: number;
+      previous: number;
+      percentageChange: number;
+    };
+    scans: {
+      current: number;
+      previous: number;
+      percentageChange: number;
+    };
+  };
 }
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const [recentQRCodes, setRecentQRCodes] = useState<QRCode[]>([]);
+  const { toast } = useToast();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<DashboardData | null>(null);
 
   useEffect(() => {
-    // This would be replaced with an actual API call in a real implementation
-    const fetchRecentQRCodes = () => {
-      console.log("Dashboard page: Fetching recent QR codes");
+    if (user?.uid) {
+      loadDashboardData();
+    }
+  }, [user?.uid]);
+
+  const loadDashboardData = async () => {
+    try {
       setLoading(true);
-      
-      // Log the user state
-      console.log("Dashboard page: Current user state:", { 
-        user: user ? `${user.email} (${user.uid})` : "No user",
-        authenticated: !!user
+      const metrics = await getDashboardMetrics(user!.uid);
+      setData(metrics);
+    } catch (error) {
+      console.error("Error loading dashboard data:", error);
+      toast({
+        title: "Error loading dashboard",
+        description: "Failed to load dashboard data. Please try again.",
+        variant: "destructive",
       });
-      
-      // Simulate API call
-      setTimeout(() => {
-        console.log("Dashboard page: QR code data loaded");
-        setRecentQRCodes([
-          {
-            id: "1",
-            name: "Company Website",
-            type: "URL",
-            scans: 245,
-            createdAt: "2023-03-15T12:00:00Z",
-          },
-          {
-            id: "2",
-            name: "Product Catalog",
-            type: "URL",
-            scans: 187,
-            createdAt: "2023-04-02T09:30:00Z",
-          },
-          {
-            id: "3",
-            name: "Contact Card",
-            type: "VCARD",
-            scans: 92,
-            createdAt: "2023-04-10T15:45:00Z",
-          },
-        ]);
-        setLoading(false);
-      }, 1000);
-    };
-
-    fetchRecentQRCodes();
-  }, [user]);
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
+    } finally {
+      setLoading(false);
+    }
   };
 
-  return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-        <div className="flex items-center space-x-2">
-          <Button asChild>
-            <Link href="/dashboard/create">
-              <Plus className="mr-2 h-4 w-4" />
-              Create QR Code
-            </Link>
-          </Button>
-        </div>
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
       </div>
-      
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            Overview of your QR codes and analytics.
+          </p>
+        </div>
+        <Button onClick={() => router.push("/dashboard/create")}>
+          <Plus className="w-4 h-4 mr-2" />
+          Create QR Code
+        </Button>
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total QR Codes</CardTitle>
             <QrCode className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">3</div>
-            <p className="text-xs text-muted-foreground">
-              +0% from last month
-            </p>
+            <div className="text-2xl font-bold">{data?.totalQRCodes || 0}</div>
+            {data?.monthlyComparison && (
+              <div className="text-xs text-muted-foreground flex items-center mt-1">
+                {data.monthlyComparison.qrCodes.percentageChange > 0 ? (
+                  <ArrowUpRight className="h-3 w-3 text-green-500 mr-1" />
+                ) : (
+                  <ArrowDownRight className="h-3 w-3 text-red-500 mr-1" />
+                )}
+                <span className={data.monthlyComparison.qrCodes.percentageChange > 0 ? "text-green-500" : "text-red-500"}>
+                  {Math.abs(data.monthlyComparison.qrCodes.percentageChange).toFixed(1)}% from last month
+                </span>
+              </div>
+            )}
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Scans</CardTitle>
-            <BarChart className="h-4 w-4 text-muted-foreground" />
+            <Scan className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">524</div>
-            <p className="text-xs text-muted-foreground">
-              +12% from last month
+            <div className="text-2xl font-bold">{data?.totalScans || 0}</div>
+            {data?.monthlyComparison && (
+              <div className="text-xs text-muted-foreground flex items-center mt-1">
+                {data.monthlyComparison.scans.percentageChange > 0 ? (
+                  <ArrowUpRight className="h-3 w-3 text-green-500 mr-1" />
+                ) : (
+                  <ArrowDownRight className="h-3 w-3 text-red-500 mr-1" />
+                )}
+                <span className={data.monthlyComparison.scans.percentageChange > 0 ? "text-green-500" : "text-red-500"}>
+                  {Math.abs(data.monthlyComparison.scans.percentageChange).toFixed(1)}% from last month
+                </span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">This Month</CardTitle>
+            <QrCode className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{data?.monthlyComparison?.qrCodes.current || 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              QR codes created this month
             </p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Subscription</CardTitle>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              className="h-4 w-4 text-muted-foreground"
-            >
-              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-            </svg>
+            <CardTitle className="text-sm font-medium">Monthly Scans</CardTitle>
+            <Scan className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">Free</div>
-            <p className="text-xs text-muted-foreground">
-              <Link href="/dashboard/subscription" className="text-blue-500 hover:underline">
-                Upgrade to Pro
-              </Link>
+            <div className="text-2xl font-bold">{data?.monthlyComparison?.scans.current || 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Scans this month
             </p>
           </CardContent>
         </Card>
       </div>
-      
-      <div className="grid gap-4 md:grid-cols-1">
-        <Card className="col-span-1">
+
+      {/* Recent QR Codes */}
+      <div>
+        <Card>
           <CardHeader>
             <CardTitle>Recent QR Codes</CardTitle>
-            <CardDescription>
-              Your most recently created QR codes.
-            </CardDescription>
+            <CardDescription>Your recently created QR codes.</CardDescription>
           </CardHeader>
           <CardContent>
-            {loading ? (
-              <div className="space-y-4">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="flex items-center space-x-4">
-                    <Skeleton className="h-12 w-12 rounded" />
-                    <div className="space-y-2">
-                      <Skeleton className="h-4 w-[250px]" />
-                      <Skeleton className="h-4 w-[200px]" />
+            <div className="space-y-4">
+              {data?.recentQRCodes.map((qrCode) => (
+                <div
+                  key={qrCode.id}
+                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                  onClick={() => router.push(`/dashboard/qrcodes/${qrCode.id}`)}
+                >
+                  <div className="space-y-1">
+                    <p className="font-medium">{qrCode.name}</p>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span>{qrCode.type}</span>
+                      <span>•</span>
+                      <span>{format(qrCode.createdAt, "MM/dd/yyyy")}</span>
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {recentQRCodes.map((qrCode) => (
-                  <Link 
-                    href={`/dashboard/qrcodes/${qrCode.id}`} 
-                    key={qrCode.id}
-                    className="flex items-center space-x-4 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
-                  >
-                    <div className="h-12 w-12 rounded bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
-                      <QrCode className="h-6 w-6 text-gray-500 dark:text-gray-400" />
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                      <p className="text-sm font-medium">{qrCode.scanCount}</p>
+                      <p className="text-xs text-muted-foreground">Scans</p>
                     </div>
-                    <div className="space-y-1">
-                      <p className="font-medium">{qrCode.name}</p>
-                      <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
-                        <span className="mr-2">{qrCode.type}</span>
-                        <span>•</span>
-                        <span className="mx-2">{qrCode.scans} scans</span>
-                        <span>•</span>
-                        <span className="ml-2">Created {formatDate(qrCode.createdAt)}</span>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-                <div className="pt-2">
-                  <Button variant="outline" asChild className="w-full">
-                    <Link href="/dashboard/qrcodes">View All QR Codes</Link>
-                  </Button>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                  </div>
                 </div>
-              </div>
-            )}
+              ))}
+              {(!data?.recentQRCodes || data.recentQRCodes.length === 0) && (
+                <div className="text-center py-6">
+                  <QrCode className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">No QR codes created yet</p>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>

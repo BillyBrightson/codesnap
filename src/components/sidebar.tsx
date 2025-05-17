@@ -10,7 +10,9 @@ import {
   BarChart, 
   UserCircle, 
   CreditCard,
-  LogOut
+  Settings,
+  LogOut,
+  Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/providers/auth-provider";
@@ -35,6 +37,12 @@ const routes = [
     color: "text-pink-700",
   },
   {
+    label: "Trash",
+    icon: Trash2,
+    href: "/dashboard/trash",
+    color: "text-red-500",
+  },
+  {
     label: "Analytics",
     icon: BarChart,
     href: "/dashboard/analytics",
@@ -51,6 +59,12 @@ const routes = [
     icon: CreditCard,
     href: "/dashboard/subscription",
     color: "text-green-700",
+  },
+  {
+    label: "Settings",
+    icon: Settings,
+    href: "/dashboard/settings",
+    color: "text-gray-500",
   },
 ];
 

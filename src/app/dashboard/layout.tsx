@@ -14,7 +14,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Settings, Bell } from "lucide-react";
+import { Settings } from "lucide-react";
+import { NotificationsDropdown } from "@/components/notifications-dropdown";
 
 export default function DashboardLayout({
   children,
@@ -95,10 +96,7 @@ export default function DashboardLayout({
               <div className="h-16 flex items-center justify-between">
                 <h1 className="text-xl font-semibold">Dashboard</h1>
                 <div className="flex items-center gap-4">
-                  <Button variant="ghost" size="icon" className="relative">
-                    <Bell className="h-5 w-5 text-gray-600" />
-                    <span className="absolute top-0 right-0 h-2 w-2 bg-red-500 rounded-full"></span>
-                  </Button>
+                  <NotificationsDropdown />
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-full overflow-hidden p-0">
@@ -116,7 +114,7 @@ export default function DashboardLayout({
                         </div>
                       </DropdownMenuLabel>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem className="cursor-pointer">
+                      <DropdownMenuItem className="cursor-pointer" onClick={() => router.push("/dashboard/settings")}>
                         <Settings className="mr-2 h-4 w-4" />
                         <span>Settings</span>
                       </DropdownMenuItem>
@@ -132,11 +130,11 @@ export default function DashboardLayout({
           <div className="max-w-7xl mx-auto">
             <div className="bg-white rounded-lg shadow-sm">
               <div className="px-6 py-6">
-                {children}
+        {children}
               </div>
             </div>
           </div>
-        </main>
+      </main>
       </div>
     </div>
   );

@@ -1,47 +1,123 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/providers/auth-provider";
+import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { getUserQRCodes, deleteQRCode } from "@/lib/firebase/qr-codes";
+import { SavedQRCode } from "@/types";
+import { Download, Edit, Link, MoreHorizontal, Plus, QrCode, Search, Share2, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { format } from "date-fns";
+import { createQRCodeNotification } from "@/lib/firebase/notifications";
+import { 
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Link, Download, Pencil, Trash2, MoreHorizontal } from "lucide-react";
-import { format } from "date-fns";
-import { SavedQRCode } from "@/types";
+import { QRCodePreviewModal } from "@/components/qr-code-preview-modal";
 
 export default function QRCodesPage() {
-  const [searchQuery, setSearchQuery] = useState("");
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
   const [qrCodes, setQrCodes] = useState<SavedQRCode[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedQRCode, setSelectedQRCode] = useState<SavedQRCode | null>(null);
+  
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const fetchQRCodes = async () => {
+      try {
+        setLoading(true);
+        const qrCodesData = await getUserQRCodes(user.uid);
+        setQrCodes(qrCodesData as SavedQRCode[]);
+      } catch (error) {
+        console.error("Error fetching QR codes:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load QR codes. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchQRCodes();
+  }, [user?.uid, toast]);
+
+  const handleDelete = async (id: string) => {
+    if (!user?.uid) return;
+    
+    try {
+      // Get the QR code name before deletion
+      const qrCode = qrCodes.find(code => code.id === id);
+      if (!qrCode) return;
+
+      await deleteQRCode(user.uid, id);
+      setQrCodes(prev => prev.filter(code => code.id !== id));
+      
+      // Create deletion notification
+      await createQRCodeNotification(user.uid, qrCode.name, 'deleted');
+      
+      toast({
+        title: "QR code deleted",
+        description: "Your QR code has been deleted successfully.",
+      });
+    } catch (error) {
+      console.error("Error deleting QR code:", error);
+      toast({
+        title: "Error deleting QR code",
+        description: "Failed to delete QR code. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleDownload = (qrCode: SavedQRCode) => {
+    if (!qrCode.imageData) return;
+
     const link = document.createElement("a");
-    link.href = qrCode.dataUrl;
-    link.download = `${qrCode.name}.png`;
+    link.href = qrCode.imageData;
+    link.download = `${qrCode.name}-qr-code.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  const handleDelete = (id: string) => {
-    setQrCodes((prev) => prev.filter((qr) => qr.id !== id));
+  const handleShare = async (qrCode: SavedQRCode) => {
+    try {
+      await navigator.share({
+        title: qrCode.name,
+        text: `Check out my QR code: ${qrCode.name}`,
+        url: qrCode.content,
+      });
+    } catch (error) {
+      // User cancelled or share failed
+      console.error("Error sharing:", error);
+    }
   };
 
-  const filteredQRCodes = qrCodes.filter((qr) =>
-    qr.name.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredQRCodes = qrCodes.filter(code =>
+    code.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+  
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -51,107 +127,139 @@ export default function QRCodesPage() {
             Manage and organize all your QR codes.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/create">
-            <span className="hidden sm:inline-block">Create QR Code</span>
-            <span className="sm:hidden">Create</span>
-          </Link>
+        <Button onClick={() => router.push("/dashboard/create")}>
+          <Plus className="w-4 h-4 mr-2" />
+          Create QR Code
         </Button>
       </div>
-
-      <div className="flex items-center gap-4">
-        <div className="flex-1">
-          <Input
-            placeholder="Search QR codes..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="max-w-sm"
-          />
+      
+      <div className="flex items-center gap-2">
+        <Search className="w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Search QR codes..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="max-w-sm"
+        />
+      </div>
+      
+      {filteredQRCodes.length === 0 ? (
+        <div className="text-center py-12 border rounded-lg bg-background">
+          <QrCode className="h-12 w-12 mx-auto text-muted-foreground" />
+          <h3 className="mt-4 text-lg font-semibold">No QR codes found</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            {qrCodes.length === 0
+              ? "Create your first QR code to get started!"
+              : "No QR codes match your search."}
+          </p>
+          {qrCodes.length === 0 && (
+            <Button
+              variant="outline"
+              onClick={() => router.push("/dashboard/create")}
+              className="mt-4"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Create QR Code
+            </Button>
+          )}
         </div>
-      </div>
-
-      <div className="border rounded-lg">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead>Dynamic</TableHead>
-              <TableHead className="w-[100px]">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredQRCodes.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center py-8">
-                  <div className="flex flex-col items-center justify-center text-sm text-muted-foreground">
-                    <p>No QR codes found</p>
-                    <Button
-                      variant="link"
-                      asChild
-                      className="mt-2"
-                    >
-                      <Link href="/dashboard/create">Create your first QR code</Link>
-                    </Button>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          {filteredQRCodes.map((qrCode) => (
+            <Card key={qrCode.id} className="group">
+              <CardHeader className="p-4 pb-2">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1 w-full pr-8">
+                    <CardTitle className="line-clamp-1 text-sm">{qrCode.name}</CardTitle>
+                    <CardDescription className="text-xs">
+                      {format(new Date(qrCode.createdAt), "MMM d, yyyy")}
+                    </CardDescription>
                   </div>
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredQRCodes.map((qrCode) => (
-                <TableRow key={qrCode.id}>
-                  <TableCell className="font-medium">{qrCode.name}</TableCell>
-                  <TableCell>{qrCode.type}</TableCell>
-                  <TableCell>
-                    {format(new Date(qrCode.createdAt), "MMM d, yyyy")}
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                        qrCode.dynamic
-                          ? "bg-green-100 text-green-700"
-                          : "bg-gray-100 text-gray-700"
-                      }`}
-                    >
-                      {qrCode.dynamic ? "Yes" : "No"}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 p-0"
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                          <span className="sr-only">Open menu</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => handleDownload(qrCode)}
-                          className="cursor-pointer"
-                        >
-                          <Download className="mr-2 h-4 w-4" />
-                          Download
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => handleDelete(qrCode.id)}
-                          className="cursor-pointer text-red-600"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 opacity-0 group-hover:opacity-100 absolute right-2 top-3"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handleDownload(qrCode)}>
+                        <Download className="w-4 h-4 mr-2" />
+                        Download
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleShare(qrCode)}>
+                        <Share2 className="w-4 h-4 mr-2" />
+                        Share
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => router.push(`/dashboard/qrcodes/${qrCode.id}`)}>
+                        <Edit className="w-4 h-4 mr-2" />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => handleDelete(qrCode.id)}
+                        className="text-red-600"
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div 
+                  className="aspect-square relative bg-muted rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
+                  onClick={() => setSelectedQRCode(qrCode)}
+                >
+                  {qrCode.imageData ? (
+                    <img
+                      src={qrCode.imageData}
+                      alt={qrCode.name}
+                      className="w-full h-full object-contain p-2"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center w-full h-full">
+                      <QrCode className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+              <CardFooter className="p-4 pt-0">
+                <div className="flex items-center gap-2 w-full">
+                  <Badge variant="secondary" className="capitalize text-xs">
+                    {qrCode.type}
+                  </Badge>
+                  {qrCode.isDynamic && (
+                    <Badge variant="default" className="text-xs">Dynamic</Badge>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 ml-auto opacity-0 group-hover:opacity-100"
+                    onClick={() => window.open(qrCode.content, '_blank')}
+                  >
+                    <Link className="h-3 w-3" />
+                  </Button>
+                </div>
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {selectedQRCode && (
+        <QRCodePreviewModal
+          isOpen={!!selectedQRCode}
+          onClose={() => setSelectedQRCode(null)}
+          imageData={selectedQRCode.imageData}
+          name={selectedQRCode.name}
+          onDownload={() => handleDownload(selectedQRCode)}
+        />
+      )}
     </div>
   );
 } 

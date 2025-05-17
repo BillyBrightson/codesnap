@@ -42,35 +42,36 @@ export default function SubscriptionPage() {
   });
   
   useEffect(() => {
-    // In a real implementation, this would be an API call to get the user's subscription
-    setTimeout(() => {
-      setSubscription({
-        plan: "FREE",
-        status: "ACTIVE",
-      });
-      setLoading(false);
-    }, 1000);
+    async function fetchSubscription() {
+      try {
+        const response = await fetch('/api/subscription');
+        if (!response.ok) {
+          throw new Error('Failed to fetch subscription');
+        }
+
+        const data = await response.json();
+        setSubscription(data);
+      } catch (error) {
+        console.error('Error fetching subscription:', error);
+        toast.error('Failed to load subscription details');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchSubscription();
   }, []);
   
   const handleUpgrade = () => {
-    toast.success("Redirecting to checkout...");
-    // In a real implementation, this would redirect to a Stripe checkout
+    toast.info("Payment integration coming soon!");
   };
   
   const handleCancelSubscription = () => {
-    toast.success("Your subscription will be canceled at the end of the billing period.");
-    setSubscription({
-      ...subscription,
-      cancelAtPeriodEnd: true,
-    });
+    toast.info("Subscription management coming soon!");
   };
   
   const handleResumeSubscription = () => {
-    toast.success("Your subscription has been resumed.");
-    setSubscription({
-      ...subscription,
-      cancelAtPeriodEnd: false,
-    });
+    toast.info("Subscription management coming soon!");
   };
   
   const formatDate = (dateString?: string) => {
