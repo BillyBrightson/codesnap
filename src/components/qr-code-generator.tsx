@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,12 +14,16 @@ import {
   User,
   Wifi,
   Lock,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/providers/auth-provider";
-import { saveQRCode, saveQRCodeToFirestore } from "@/lib/firebase/qr-codes";
+import { saveQRCodeToFirestore } from "@/lib/firebase/qr-codes";
 import { useRouter } from "next/navigation";
 import { QRCodeType } from "@/types";
+import { Switch } from "@/components/ui/switch";
+import { SketchPicker } from "react-color";
 
 type QRType = "URL" | "Text" | "Email" | "Phone" | "vCard" | "WiFi";
 
@@ -77,6 +81,25 @@ export function QRCodeGenerator() {
   const [bgColor, setBgColor] = useState("#FFFFFF");
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
   const [saving, setSaving] = useState(false);
+  const [showLogoSettings, setShowLogoSettings] = useState(false);
+  const [showFrameSettings, setShowFrameSettings] = useState(false);
+
+  // Logo state
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoEnabled, setLogoEnabled] = useState(false);
+  const [logoSize, setLogoSize] = useState(20); // percent
+  const [logoPosition, setLogoPosition] = useState<'center' | 'custom'>('center');
+  const [logoError, setLogoError] = useState<string | null>(null);
+
+  // Frame state
+  const [frameEnabled, setFrameEnabled] = useState(false);
+  const [frameStyle, setFrameStyle] = useState<'classic' | 'rounded' | 'circular' | 'diamond' | 'custom'>('classic');
+  const [frameColor, setFrameColor] = useState('#000000');
+  const [frameThickness, setFrameThickness] = useState(8);
+
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [scannabilityWarning, setScannabilityWarning] = useState<string | null>(null);
 
   const generateQRCodeContent = () => {
     switch (qrType) {
@@ -160,14 +183,17 @@ END:VCARD`;
       return;
     }
 
-    if (!qrCodeDataUrl) {
+    // Use the canvas image as the QR code image
+    const canvas = canvasRef.current;
+    if (!canvas) {
       toast({
-        title: "Generate QR code first",
+        title: "No QR code generated",
         description: "Please generate a QR code before saving.",
         variant: "destructive",
       });
       return;
     }
+    const composedImageDataUrl = canvas.toDataURL("image/png");
 
     // Validate content based on type
     const content = generateQRCodeContent();
@@ -196,7 +222,7 @@ END:VCARD`;
         foregroundColor: fgColor,
         backgroundColor: bgColor,
         size,
-        imageData: qrCodeDataUrl,
+        imageData: composedImageDataUrl,
       };
 
       console.log('Attempting to save QR code with data:', qrCodeData);
@@ -238,6 +264,34 @@ END:VCARD`;
   const updateQRData = (key: keyof QRData, value: string) => {
     setQrData((prev) => ({ ...prev, [key]: value }));
   };
+
+  // Logo upload handler
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/svg+xml', 'image/webp'].includes(file.type)) {
+      setLogoError('Only PNG, JPG, SVG, or WEBP files are allowed.');
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      setLogoError('Logo file must be less than 1MB.');
+      return;
+    }
+    setLogoError(null);
+    setLogoFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setLogoPreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  // Frame gallery
+  const frameStyles = [
+    { key: 'classic', label: 'Classic (Square)' },
+    { key: 'rounded', label: 'Rounded' },
+    { key: 'circular', label: 'Circular' },
+    { key: 'diamond', label: 'Diamond' },
+    { key: 'custom', label: 'Custom Shape' },
+  ];
 
   const renderInputFields = () => {
     switch (qrType) {
@@ -428,6 +482,102 @@ END:VCARD`;
     }
   };
 
+  // Canvas drawing logic
+  useEffect(() => {
+    const draw = async () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw QR code base
+      if (qrCodeDataUrl) {
+        const qrImg = new window.Image();
+        qrImg.src = qrCodeDataUrl;
+        await new Promise((resolve) => {
+          qrImg.onload = resolve;
+        });
+        ctx.drawImage(qrImg, 0, 0, size, size);
+      }
+
+      // Draw frame if enabled
+      if (frameEnabled) {
+        ctx.save();
+        ctx.strokeStyle = frameColor;
+        ctx.lineWidth = frameThickness;
+        switch (frameStyle) {
+          case 'classic':
+            ctx.strokeRect(
+              frameThickness / 2,
+              frameThickness / 2,
+              size - frameThickness,
+              size - frameThickness
+            );
+            break;
+          case 'rounded':
+            ctx.beginPath();
+            ctx.lineJoin = "round";
+            ctx.moveTo(frameThickness, frameThickness * 2);
+            ctx.arcTo(size - frameThickness, frameThickness, size - frameThickness, size - frameThickness, 24);
+            ctx.arcTo(size - frameThickness, size - frameThickness, frameThickness, size - frameThickness, 24);
+            ctx.arcTo(frameThickness, size - frameThickness, frameThickness, frameThickness, 24);
+            ctx.arcTo(frameThickness, frameThickness, size - frameThickness, frameThickness, 24);
+            ctx.closePath();
+            ctx.stroke();
+            break;
+          case 'circular':
+            ctx.beginPath();
+            ctx.arc(size / 2, size / 2, size / 2 - frameThickness / 2, 0, 2 * Math.PI);
+            ctx.stroke();
+            break;
+          case 'diamond':
+            ctx.save();
+            ctx.translate(size / 2, size / 2);
+            ctx.rotate(Math.PI / 4);
+            ctx.strokeRect(-size / 2 + frameThickness, -size / 2 + frameThickness, size - 2 * frameThickness, size - 2 * frameThickness);
+            ctx.restore();
+            break;
+          case 'custom':
+            // Custom shape placeholder
+            ctx.setLineDash([8, 8]);
+            ctx.strokeRect(
+              frameThickness / 2,
+              frameThickness / 2,
+              size - frameThickness,
+              size - frameThickness
+            );
+            ctx.setLineDash([]);
+            break;
+        }
+        ctx.restore();
+      }
+
+      // Draw logo if enabled
+      setScannabilityWarning(null);
+      if (logoEnabled && logoPreview) {
+        const logoImg = new window.Image();
+        logoImg.src = logoPreview;
+        await new Promise((resolve) => {
+          logoImg.onload = resolve;
+        });
+        // Calculate logo size and position
+        const logoPx = (logoSize / 100) * size;
+        const x = (size - logoPx) / 2;
+        const y = (size - logoPx) / 2;
+        ctx.save();
+        ctx.globalAlpha = 1;
+        ctx.drawImage(logoImg, x, y, logoPx, logoPx);
+        ctx.restore();
+        // Scannability warning if logo is too large
+        if (logoSize > 25) {
+          setScannabilityWarning("Warning: Large logos may affect QR code scannability. Keep logo size under 25% for best results.");
+        }
+      }
+    };
+    draw();
+  }, [qrCodeDataUrl, size, frameEnabled, frameStyle, frameColor, frameThickness, logoEnabled, logoPreview, logoSize]);
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* QR Code Generator Section - Takes up 2 columns */}
@@ -492,75 +642,175 @@ END:VCARD`;
           </div>
 
           <div className="border-t pt-6">
-            <div className="space-y-2 mb-6">
-              <Label htmlFor="qrName">QR Code Name</Label>
-              <Input
-                id="qrName"
-                placeholder="My QR Code"
-                value={qrName}
-                onChange={(e) => setQrName(e.target.value)}
-              />
-            </div>
-
-            <div className="bg-gray-50/50 rounded-lg p-6 mb-6">
-              {renderInputFields()}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div className="space-y-2">
-                <Label htmlFor="fgColor">Foreground Color</Label>
-                <div className="flex gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Left column: Main form fields */}
+              <div>
+                <div className="space-y-2 mb-6">
+                  <Label htmlFor="qrName">QR Code Name</Label>
                   <Input
-                    id="fgColor"
-                    type="color"
-                    value={fgColor}
-                    onChange={(e) => setFgColor(e.target.value)}
-                    className="w-12 h-10 p-1"
+                    id="qrName"
+                    placeholder="My QR Code"
+                    value={qrName}
+                    onChange={(e) => setQrName(e.target.value)}
                   />
-                  <Input
-                    type="text"
-                    value={fgColor}
-                    onChange={(e) => setFgColor(e.target.value)}
-                    className="flex-1"
+                </div>
+
+                <div className="bg-gray-50/50 rounded-lg p-6 mb-6">
+                  {renderInputFields()}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="fgColor">Foreground Color</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="fgColor"
+                        type="color"
+                        value={fgColor}
+                        onChange={(e) => setFgColor(e.target.value)}
+                        className="w-12 h-10 p-1"
+                      />
+                      <Input
+                        type="text"
+                        value={fgColor}
+                        onChange={(e) => setFgColor(e.target.value)}
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bgColor">Background Color</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="bgColor"
+                        type="color"
+                        value={bgColor}
+                        onChange={(e) => setBgColor(e.target.value)}
+                        className="w-12 h-10 p-1"
+                      />
+                      <Input
+                        type="text"
+                        value={bgColor}
+                        onChange={(e) => setBgColor(e.target.value)}
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4 mb-6">
+                  <div className="flex items-center justify-between">
+                    <Label>QR Code Size</Label>
+                    <span className="text-sm text-muted-foreground">{size}px</span>
+                  </div>
+                  <Slider
+                    value={[size]}
+                    onValueChange={(value) => setSize(value[0])}
+                    min={100}
+                    max={1000}
+                    step={10}
+                    className="w-full"
                   />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="bgColor">Background Color</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="bgColor"
-                    type="color"
-                    value={bgColor}
-                    onChange={(e) => setBgColor(e.target.value)}
-                    className="w-12 h-10 p-1"
-                  />
-                  <Input
-                    type="text"
-                    value={bgColor}
-                    onChange={(e) => setBgColor(e.target.value)}
-                    className="flex-1"
-                  />
+              {/* Right column: Advanced Settings */}
+              <div>
+                <div className="border rounded-lg p-4 bg-muted/30">
+                  <h2 className="font-semibold text-lg mb-2">Advanced Settings</h2>
+                  {/* Logo Section */}
+                  <div>
+                    <button
+                      type="button"
+                      className="flex items-center gap-2 w-full text-left py-2"
+                      onClick={() => setShowLogoSettings((v) => !v)}
+                    >
+                      <span className="font-medium">Logo</span>
+                      {showLogoSettings ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </button>
+                    {showLogoSettings && (
+                      <div className="pl-4 pb-4 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Switch checked={logoEnabled} onCheckedChange={setLogoEnabled} />
+                          <span>Enable Logo</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={handleLogoUpload} disabled={!logoEnabled} />
+                          {logoPreview && (
+                            <img src={logoPreview} alt="Logo preview" className="w-10 h-10 object-contain border rounded" />
+                          )}
+                        </div>
+                        {logoError && <div className="text-red-500 text-xs">{logoError}</div>}
+                        <div className="flex items-center gap-2">
+                          <span>Logo Size</span>
+                          <Slider min={10} max={30} value={[logoSize]} onValueChange={([v]) => setLogoSize(v)} disabled={!logoEnabled} className="w-32" />
+                          <span>{logoSize}%</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span>Position</span>
+                          <select value={logoPosition} onChange={e => setLogoPosition(e.target.value as any)} disabled={!logoEnabled} className="border rounded px-2 py-1">
+                            <option value="center">Center</option>
+                            <option value="custom">Custom (coming soon)</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {/* Frame Section */}
+                  <div>
+                    <button
+                      type="button"
+                      className="flex items-center gap-2 w-full text-left py-2"
+                      onClick={() => setShowFrameSettings((v) => !v)}
+                    >
+                      <span className="font-medium">Frame</span>
+                      {showFrameSettings ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </button>
+                    {showFrameSettings && (
+                      <div className="pl-4 pb-4 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Switch checked={frameEnabled} onCheckedChange={setFrameEnabled} />
+                          <span>Enable Frame</span>
+                        </div>
+                        <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                          {frameStyles.map(style => (
+                            <button
+                              key={style.key}
+                              className={`px-3 py-1 rounded border ${frameStyle === style.key ? 'border-primary bg-primary/10' : 'border-muted'}`}
+                              onClick={() => setFrameStyle(style.key as any)}
+                              disabled={!frameEnabled}
+                            >
+                              {style.label}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span>Frame Color</span>
+                          {frameEnabled ? (
+                            <SketchPicker
+                              color={frameColor}
+                              onChange={(color: { hex: string }) => setFrameColor(color.hex)}
+                              disableAlpha
+                              presetColors={["#000000", "#FFFFFF", "#FF0000", "#00FF00", "#0000FF"]}
+                              width="180px"
+                              className="border rounded"
+                              styles={{ default: { picker: { boxShadow: 'none' } } }}
+                            />
+                          ) : (
+                            <div className="w-[180px] h-10 rounded border bg-gray-100 flex items-center justify-center text-xs text-gray-400">Disabled</div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span>Thickness</span>
+                          <Slider min={2} max={24} value={[frameThickness]} onValueChange={([v]) => setFrameThickness(v)} disabled={!frameEnabled} className="w-32" />
+                          <span>{frameThickness}px</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-
-            <div className="space-y-4 mb-6">
-              <div className="flex items-center justify-between">
-                <Label>QR Code Size</Label>
-                <span className="text-sm text-muted-foreground">{size}px</span>
-              </div>
-              <Slider
-                value={[size]}
-                onValueChange={(value) => setSize(value[0])}
-                min={100}
-                max={1000}
-                step={10}
-                className="w-full"
-              />
-            </div>
-
-            <div className="flex gap-4">
+            <div className="flex gap-4 mt-8">
               <Button 
                 onClick={generateQRCode} 
                 className="flex-1" 
@@ -593,23 +843,25 @@ END:VCARD`;
               Preview and download your generated QR code.
             </p>
           </div>
-          
-          <div className="aspect-square bg-gray-50 border rounded-lg p-6 flex flex-col items-center justify-center">
+          <div className="aspect-square bg-gray-50 border rounded-lg p-6 flex flex-col items-center justify-center relative">
             {qrCodeDataUrl ? (
-              <img
-                src={qrCodeDataUrl}
-                alt="Generated QR Code"
-                className="max-w-full h-auto rounded shadow-sm"
+              <canvas
+                ref={canvasRef}
+                width={size}
+                height={size}
+                style={{ maxWidth: "100%", height: "auto", borderRadius: 8, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}
               />
             ) : (
-              <div className="text-gray-400 text-center">
+              <div className="flex flex-col items-center justify-center h-full w-full">
                 <QrCode className="h-20 w-20 mx-auto mb-4" />
                 <p className="text-sm">Your QR code will appear here</p>
                 <p className="text-xs text-muted-foreground mt-2">Click generate to create your QR code</p>
               </div>
             )}
+            {scannabilityWarning && (
+              <div className="text-xs text-yellow-600 mt-2 text-center">{scannabilityWarning}</div>
+            )}
           </div>
-
           {qrCodeDataUrl && (
             <Button
               onClick={handleDownload}

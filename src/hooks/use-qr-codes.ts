@@ -4,7 +4,7 @@ import { SavedQRCode } from '@/types';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/providers/auth-provider';
 
-export function useQRCodes(showTrash = false) {
+export function useQRCodes(showArchive = false) {
   const [qrCodes, setQRCodes] = useState<SavedQRCode[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
@@ -17,7 +17,7 @@ export function useQRCodes(showTrash = false) {
     }
     
     try {
-      const codes = await qrCodeService.getAllQRCodes(user.uid, showTrash);
+      const codes = await qrCodeService.getAllQRCodes(user.uid, showArchive);
       setQRCodes(codes || []);
     } catch (error: any) {
       console.error('Error loading QR codes:', error);
@@ -40,7 +40,7 @@ export function useQRCodes(showTrash = false) {
     } finally {
       setLoading(false);
     }
-  }, [user?.uid, toast, showTrash]);
+  }, [user?.uid, toast, showArchive]);
 
   useEffect(() => {
     loadQRCodes();
@@ -87,7 +87,7 @@ export function useQRCodes(showTrash = false) {
     if (!user?.uid) return false;
 
     try {
-      const existingCode = await qrCodeService.getQRCode(id);
+      const existingCode = await qrCodeService.getQRCode(user.uid, id, showArchive);
       if (!existingCode) throw new Error('QR code not found');
 
       const updatedCode = {
@@ -96,7 +96,7 @@ export function useQRCodes(showTrash = false) {
         updatedAt: new Date().toISOString(),
       };
 
-      await qrCodeService.updateQRCode(id, updates);
+      await qrCodeService.updateQRCode(user.uid, id, updates);
       setQRCodes(prev => prev.map(code => 
         code.id === id ? updatedCode : code
       ));
@@ -115,25 +115,25 @@ export function useQRCodes(showTrash = false) {
       });
       return false;
     }
-  }, [user?.uid, toast]);
+  }, [user?.uid, toast, showArchive]);
 
-  const moveToTrash = useCallback(async (id: string) => {
+  const moveToArchive = useCallback(async (id: string) => {
     if (!user?.uid) return false;
 
     try {
-      await qrCodeService.moveToTrash(id);
+      await qrCodeService.moveToArchive(user.uid, id);
       setQRCodes(prev => prev.filter(code => code.id !== id));
 
       toast({
-        title: "QR Code moved to trash",
-        description: "Your QR code has been moved to trash.",
+        title: "QR Code archived",
+        description: "Your QR code has been moved to archive.",
       });
 
       return true;
     } catch (error) {
       toast({
-        title: "Error moving QR code to trash",
-        description: "Failed to move QR code to trash. Please try again.",
+        title: "Error archiving QR code",
+        description: "Failed to archive QR code. Please try again.",
         variant: "destructive",
       });
       return false;
@@ -144,7 +144,7 @@ export function useQRCodes(showTrash = false) {
     if (!user?.uid) return false;
 
     try {
-      await qrCodeService.deleteQRCode(id);
+      await qrCodeService.deleteQRCode(user.uid, id, showArchive);
       setQRCodes(prev => prev.filter(code => code.id !== id));
 
       toast({
@@ -161,18 +161,18 @@ export function useQRCodes(showTrash = false) {
       });
       return false;
     }
-  }, [user?.uid, toast]);
+  }, [user?.uid, toast, showArchive]);
 
-  const restoreFromTrash = useCallback(async (id: string) => {
+  const restoreFromArchive = useCallback(async (id: string) => {
     if (!user?.uid) return false;
 
     try {
-      await qrCodeService.restoreFromTrash(id);
+      await qrCodeService.restoreFromArchive(user.uid, id);
       setQRCodes(prev => prev.filter(code => code.id !== id));
 
       toast({
         title: "QR Code restored",
-        description: "Your QR code has been restored from trash.",
+        description: "Your QR code has been restored from archive.",
       });
 
       return true;
@@ -191,9 +191,9 @@ export function useQRCodes(showTrash = false) {
     loading,
     createQRCode,
     updateQRCode,
-    moveToTrash,
+    moveToArchive,
     deleteQRCode,
-    restoreFromTrash,
+    restoreFromArchive,
     refresh: loadQRCodes,
   };
 }

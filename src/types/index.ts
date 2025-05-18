@@ -11,6 +11,7 @@ export interface SavedQRCode {
   createdAt: string;
   updatedAt: string;
   deletedAt?: string;
+  archivedAt?: string;
   data?: {
     [key: string]: any;
   };

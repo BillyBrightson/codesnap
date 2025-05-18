@@ -37,9 +37,9 @@ const routes = [
     color: "text-pink-700",
   },
   {
-    label: "Trash",
+    label: "Archive",
     icon: Trash2,
-    href: "/dashboard/trash",
+    href: "/dashboard/archive",
     color: "text-red-500",
   },
   {

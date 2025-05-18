@@ -9,10 +9,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from "@/components/ui/badge";
 import { getUserQRCodes, deleteQRCode } from "@/lib/firebase/qr-codes";
 import { SavedQRCode } from "@/types";
-import { Download, Edit, Link, MoreHorizontal, Plus, QrCode, Search, Share2, Trash2 } from "lucide-react";
+import { Download, Edit, Link, MoreHorizontal, Plus, QrCode, Search, Share2, Archive } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { createQRCodeNotification } from "@/lib/firebase/notifications";
+import { qrCodeService } from "@/lib/qr-service";
 import { 
   DropdownMenu,
   DropdownMenuContent,
@@ -103,6 +104,41 @@ export default function QRCodesPage() {
     } catch (error) {
       // User cancelled or share failed
       console.error("Error sharing:", error);
+    }
+  };
+
+  const handleArchive = async (id: string | undefined) => {
+    if (!user?.uid || !id) {
+      console.error("No user or QR code id provided to handleArchive", { user, id });
+      toast({
+        title: "Error archiving QR code",
+        description: "Invalid QR code selected. Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      // Get the QR code name before archiving
+      const qrCode = qrCodes.find(code => code.id === id);
+      if (!qrCode) return;
+
+      await qrCodeService.moveToArchive(user.uid, id);
+      setQrCodes(prev => prev.filter(code => code.id !== id));
+      
+      // Create archive notification
+      await createQRCodeNotification(user.uid, qrCode.name, 'archived');
+      
+      toast({
+        title: "QR code archived",
+        description: "Your QR code has been moved to archive.",
+      });
+    } catch (error) {
+      console.error("Error archiving QR code:", error);
+      toast({
+        title: "Error archiving QR code",
+        description: "Failed to archive QR code. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -200,11 +236,11 @@ export default function QRCodesPage() {
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        onClick={() => handleDelete(qrCode.id)}
-                        className="text-red-600"
+                        onClick={() => handleArchive(qrCode.id)}
+                        className="text-blue-600"
                       >
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        Delete
+                        <Archive className="w-4 h-4 mr-2" />
+                        Archive
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -226,6 +262,18 @@ export default function QRCodesPage() {
                       <QrCode className="h-8 w-8 text-muted-foreground" />
                     </div>
                   )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-2 right-2 h-8 w-8 opacity-0 group-hover:opacity-100 bg-background/80 hover:bg-background"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleArchive(qrCode.id);
+                    }}
+                    title="Archive QR code"
+                  >
+                    <Archive className="h-4 w-4 text-blue-600" />
+                  </Button>
                 </div>
               </CardContent>
               <CardFooter className="p-4 pt-0">
@@ -236,14 +284,6 @@ export default function QRCodesPage() {
                   {qrCode.isDynamic && (
                     <Badge variant="default" className="text-xs">Dynamic</Badge>
                   )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 ml-auto opacity-0 group-hover:opacity-100"
-                    onClick={() => window.open(qrCode.content, '_blank')}
-                  >
-                    <Link className="h-3 w-3" />
-                  </Button>
                 </div>
               </CardFooter>
             </Card>

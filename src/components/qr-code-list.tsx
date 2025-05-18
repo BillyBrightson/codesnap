@@ -12,12 +12,12 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "./ui/card"
 
 interface QRCodeListProps {
   onEdit?: (qrCode: SavedQRCode) => void;
-  showTrash?: boolean;
+  showArchive?: boolean;
 }
 
-export function QRCodeList({ onEdit, showTrash = false }: QRCodeListProps) {
+export function QRCodeList({ onEdit, showArchive = false }: QRCodeListProps) {
   // Get QR codes and actions from the hook
-  const { qrCodes = [], loading, moveToTrash, deleteQRCode, restoreFromTrash } = useQRCodes(showTrash);
+  const { qrCodes = [], loading, moveToArchive, deleteQRCode, restoreFromArchive } = useQRCodes(showArchive);
 
   // Function to handle downloading a QR code
   const handleDownload = (qrCode: SavedQRCode) => {
@@ -44,7 +44,7 @@ export function QRCodeList({ onEdit, showTrash = false }: QRCodeListProps) {
   if (qrCodes.length === 0) {
     return (
       <div className="text-center py-8 text-muted-foreground">
-        {showTrash ? "No QR codes in trash." : "No QR codes saved yet. Create your first one!"}
+        {showArchive ? "No archived QR codes." : "No QR codes saved yet. Create your first one!"}
       </div>
     );
   }
@@ -58,8 +58,8 @@ export function QRCodeList({ onEdit, showTrash = false }: QRCodeListProps) {
           <CardHeader>
             <CardTitle className="text-xl font-bold truncate">{qrCode.name}</CardTitle>
             <p className="text-sm text-muted-foreground">
-              {showTrash
-                ? `Deleted: ${format(new Date(qrCode.deletedAt || qrCode.updatedAt), "PPP")}` 
+              {showArchive
+                ? `Archived: ${format(new Date(qrCode.archivedAt || qrCode.updatedAt), "PPP")}` 
                 : `Created: ${format(new Date(qrCode.createdAt), "PPP")}`}
             </p>
           </CardHeader>
@@ -81,14 +81,14 @@ export function QRCodeList({ onEdit, showTrash = false }: QRCodeListProps) {
 
           {/* Action buttons */}
           <CardFooter className="flex justify-end gap-2 pt-2">
-            {showTrash ? (
+            {showArchive ? (
               <>
-                {/* Trash mode buttons */}
+                {/* Archive mode buttons */}
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => restoreFromTrash(qrCode.id)}
-                  title="Restore from trash"
+                  onClick={() => restoreFromArchive(qrCode.id)}
+                  title="Restore from archive"
                   className="flex items-center gap-1"
                 >
                   <RotateCcw className="h-4 w-4" />
@@ -120,8 +120,8 @@ export function QRCodeList({ onEdit, showTrash = false }: QRCodeListProps) {
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={() => moveToTrash(qrCode.id)}
-                  title="Move to trash"
+                  onClick={() => moveToArchive(qrCode.id)}
+                  title="Move to archive"
                 >
                   <Trash2 className="h-4 w-4 text-red-500" />
                 </Button>
