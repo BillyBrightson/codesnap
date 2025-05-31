@@ -583,11 +583,13 @@ END:VCARD`;
       {/* QR Code Generator Section - Takes up 2 columns */}
       <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border p-6">
         <div className="space-y-6">
-          <div>
-            <h2 className="text-2xl font-semibold tracking-tight">QR Code Generator</h2>
-            <p className="text-sm text-muted-foreground mt-2">
-              Create a QR code by selecting a type and filling in the required information.
-            </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-3xl font-bold tracking-tight">{qrName || "QR Code Generator"}</h2>
+              <p className="text-sm text-muted-foreground">
+                Create a QR code by selecting a type and filling in the required information.
+              </p>
+            </div>
           </div>
           
           <div className="grid grid-cols-3 md:grid-cols-6 gap-2">

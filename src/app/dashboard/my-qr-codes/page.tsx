@@ -17,29 +17,39 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { QRCodeService } from "@/lib/qr-service";
+import { qrCodeService } from "@/lib/qr-service";
 import { SavedQRCode } from "@/types";
 import { Download, MoreVertical, Plus, Search, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
+import { useAuth } from "@/providers/auth-provider";
 
 export default function MyQRCodesPage() {
   const [qrCodes, setQrCodes] = useState<SavedQRCode[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const router = useRouter();
+  const { user } = useAuth();
 
   useEffect(() => {
-    const codes = QRCodeService.getAllQRCodes();
-    setQrCodes(codes);
-  }, []);
+    if (user?.uid) {
+      const fetchQRCodes = async () => {
+        const codes = await qrCodeService.getAllQRCodes(user.uid);
+        setQrCodes(codes);
+      };
+      fetchQRCodes();
+    }
+  }, [user?.uid]);
 
   const filteredQRCodes = qrCodes.filter((code) =>
     code.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleDelete = (id: string) => {
-    QRCodeService.deleteQRCode(id);
-    setQrCodes(QRCodeService.getAllQRCodes());
+  const handleDelete = async (id: string) => {
+    if (user?.uid) {
+      await qrCodeService.deleteQRCode(user.uid, id);
+      const updatedCodes = await qrCodeService.getAllQRCodes(user.uid);
+      setQrCodes(updatedCodes);
+    }
   };
 
   const handleDownload = (code: SavedQRCode) => {
@@ -50,7 +60,6 @@ export default function MyQRCodesPage() {
   return (
     <div className="container mx-auto py-8">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">My QR Codes</h1>
         <Button onClick={() => router.push("/dashboard/create")}>
           <Plus className="w-4 h-4 mr-2" />
           Create QR Code

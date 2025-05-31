@@ -2,7 +2,7 @@
 
 import { Sidebar } from "@/components/sidebar";
 import { useAuth } from "@/providers/auth-provider";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { 
   DropdownMenu,
@@ -17,6 +17,41 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Settings } from "lucide-react";
 import { NotificationsDropdown } from "@/components/notifications-dropdown";
 
+const routes = [
+  {
+    label: "Dashboard", // Changed label to match the image default
+    href: "/dashboard",
+  },
+  {
+    label: "Create QR Code",
+    href: "/dashboard/create",
+  },
+  {
+    label: "My QR Codes",
+    href: "/dashboard/qrcodes",
+  },
+  {
+    label: "Archive",
+    href: "/dashboard/archive",
+  },
+  {
+    label: "Analytics",
+    href: "/dashboard/analytics",
+  },
+  {
+    label: "Account Settings",
+    href: "/dashboard/account", 
+  },
+  {
+    label: "Subscription",
+    href: "/dashboard/subscription",
+  },
+  {
+    label: "Settings",
+    href: "/dashboard/settings",
+  },
+];
+
 export default function DashboardLayout({
   children,
 }: {
@@ -24,6 +59,7 @@ export default function DashboardLayout({
 }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   
   useEffect(() => {
@@ -52,6 +88,9 @@ export default function DashboardLayout({
     }
     return user?.email ? user.email.charAt(0).toUpperCase() : "U";
   };
+
+  const currentRoute = routes.find(route => route.href === pathname);
+  const headerTitle = currentRoute ? currentRoute.label : "Dashboard"; // Default to Dashboard if route not found
 
   // Don't render anything during SSR
   if (!mounted) {
@@ -94,7 +133,7 @@ export default function DashboardLayout({
           <div className="px-6">
             <div className="max-w-7xl mx-auto">
               <div className="h-16 flex items-center justify-between">
-                <h1 className="text-xl font-semibold">Dashboard</h1>
+                <h1 className="text-xl font-semibold">{headerTitle}</h1>
                 <div className="flex items-center gap-4">
                   <NotificationsDropdown />
                   <DropdownMenu>
