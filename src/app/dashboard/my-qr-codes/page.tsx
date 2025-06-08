@@ -88,6 +88,7 @@ export default function MyQRCodesPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Preview</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Created</TableHead>
@@ -98,6 +99,13 @@ export default function MyQRCodesPage() {
             <TableBody>
               {filteredQRCodes.map((code) => (
                 <TableRow key={code.id}>
+                  <TableCell>
+                    {code.imageData ? (
+                      <img src={code.imageData} alt="QR code preview" className="w-16 h-16 object-contain" />
+                    ) : (
+                      <span>No preview</span>
+                    )}
+                  </TableCell>
                   <TableCell className="font-medium">{code.name}</TableCell>
                   <TableCell className="capitalize">{code.type}</TableCell>
                   <TableCell>

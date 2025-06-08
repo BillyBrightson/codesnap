@@ -165,10 +165,10 @@ export default function DashboardLayout({
           </div>
         </header>
         {/* Main Content */}
-        <main className="px-6 py-6">
+        <main className="px-6 pb-0">
           <div className="max-w-7xl mx-auto">
-            <div className="bg-white rounded-lg shadow-sm">
-              <div className="px-6 py-6">
+            <div className="bg-white shadow-sm" style={{ borderBottomLeftRadius: '1.5rem', borderBottomRightRadius: '1.5rem' }}>
+              <div className="px-6 py-3">
         {children}
               </div>
             </div>
